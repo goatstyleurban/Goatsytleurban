@@ -2,14 +2,7 @@ import { getStore } from "@netlify/blobs";
 
 export const handler = async (event, context) => {
   try {
-    // Instanciación manual pasando siteID y token de forma explícita
-    const store = getStore({
-      name: "goat_style_store",
-      siteID: process.env.NETLIFY_SITE_ID,
-      token: process.env.NETLIFY_AUTH_TOKEN,
-    });
-
-    // Lógica para autenticar en login / POST
+    // Si estás en login / POST:
     if (event.httpMethod === "POST" && event.path.includes("/login")) {
       const body = JSON.parse(event.body || "{}");
       const { user, password } = body;
@@ -17,6 +10,7 @@ export const handler = async (event, context) => {
       const adminUser = process.env.ADMIN_USER || "admin";
       const adminPassword = process.env.ADMIN_PASSWORD;
 
+      // Verificar las credenciales directamente contra las variables de entorno
       if (user === adminUser && password === adminPassword) {
         return {
           statusCode: 200,
@@ -32,6 +26,15 @@ export const handler = async (event, context) => {
       }
     }
 
+    // Inicializar la tienda de Blobs solo para operaciones de la tienda (productos, etc.)
+    let store;
+    try {
+      store = getStore("goat_style_store");
+    } catch (e) {
+      console.warn("Blobs no configurado:", e.message);
+    }
+
+    // Respuesta por defecto
     return {
       statusCode: 200,
       headers: { "Content-Type": "application/json" },
@@ -39,7 +42,7 @@ export const handler = async (event, context) => {
     };
 
   } catch (error) {
-    console.error("Error en API:", error);
+    console.error("Error en la función API:", error);
     return {
       statusCode: 500,
       headers: { "Content-Type": "application/json" },
