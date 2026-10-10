@@ -2,6 +2,7 @@ import { getStore } from "@netlify/blobs";
 
 export const handler = async (event, context) => {
   try {
+    // Instanciación de Netlify Blobs con credenciales de entorno
     const store = getStore({
       name: "goat_style_store",
       siteID: process.env.NETLIFY_SITE_ID,
@@ -11,8 +12,10 @@ export const handler = async (event, context) => {
     const path = event.path;
     const method = event.httpMethod;
 
+    // -------------------------------------------------------------
     // 1. RUTA DE AUTENTICACIÓN / LOGIN
-    if (method === "POST" && path.includes("/login")) {
+    // -------------------------------------------------------------
+    if (method === "POST" && (path.includes("/login") || path.includes("/auth/login"))) {
       const body = JSON.parse(event.body || "{}");
       const { user, password } = body;
 
@@ -34,43 +37,57 @@ export const handler = async (event, context) => {
       }
     }
 
+    // -------------------------------------------------------------
     // 2. RUTA PARA OBTENER PRODUCTOS (GET)
+    // -------------------------------------------------------------
     if (method === "GET" && (path.includes("/products") || path.includes("/productos"))) {
       let products = await store.get("products", { type: "json" });
       
-      // Garantizar que siempre devuelva un arreglo válido
       if (!Array.isArray(products)) {
         products = [];
       }
 
       return {
         statusCode: 200,
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          "Cache-Control": "no-cache, no-store, must-revalidate"
+        },
         body: JSON.stringify(products)
       };
     }
 
+    // -------------------------------------------------------------
     // 3. RUTA PARA GUARDAR O ACTUALIZAR PRODUCTOS (POST / PUT)
+    // -------------------------------------------------------------
     if ((method === "POST" || method === "PUT") && (path.includes("/products") || path.includes("/productos") || path.includes("/save"))) {
       const body = JSON.parse(event.body || "{}");
 
-      // Si se envía una lista completa o un objeto individual
       let currentProducts = await store.get("products", { type: "json" });
       if (!Array.isArray(currentProducts)) {
         currentProducts = [];
       }
 
       let updatedList = [];
+
       if (Array.isArray(body)) {
-        updatedList = body;
+        updatedList = body.map((item, index) => ({
+          ...item,
+          id: item.id || `prod_${Date.now()}_${index}`
+        }));
       } else if (body && typeof body === "object") {
-        // Buscar si existe para actualizar o agregar
-        const existingIndex = currentProducts.findIndex(p => p.id && p.id === body.id);
+        const itemToSave = { ...body };
+        if (!itemToSave.id) {
+          itemToSave.id = `prod_${Date.now()}`;
+        }
+
+        const existingIndex = currentProducts.findIndex(p => String(p.id) === String(itemToSave.id));
+        
         if (existingIndex >= 0) {
-          currentProducts[existingIndex] = body;
+          currentProducts[existingIndex] = itemToSave;
           updatedList = currentProducts;
         } else {
-          updatedList = [...currentProducts, body];
+          updatedList = [...currentProducts, itemToSave];
         }
       }
 
@@ -83,7 +100,9 @@ export const handler = async (event, context) => {
       };
     }
 
-    // Respuesta genérica por defecto
+    // -------------------------------------------------------------
+    // 4. RESPUESTA POR DEFECTO
+    // -------------------------------------------------------------
     let defaultProducts = await store.get("products", { type: "json" });
     if (!Array.isArray(defaultProducts)) {
       defaultProducts = [];

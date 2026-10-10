@@ -1,15 +1,11 @@
 /* ==========================================================
-   GOAT STYLE | Panel de administrador (dentro de la página)
-   Login, recuperar contraseña por correo, y crear / editar /
-   eliminar / ordenar productos. Solo funciona con el servidor
-   (server.js) y solo el administrador con sesión puede guardar.
+   GOAT STYLE | Panel de administrador (Netlify Functions)
    ========================================================== */
 (() => {
   "use strict";
-  if (!/^https?:$/.test(location.protocol)) return;   // sin servidor no hay panel
+  if (!/^https?:$/.test(location.protocol)) return;
 
-  const $ = (s, r = document) => r.querySelector(s);
-  const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+  const $ = (s, r = document) => r.querySelector(s);   const $$ = (s, r = document) => [...r.querySelectorAll(s)];
   const h = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const SIZE_SETS = {
     camisas: SIZES_CLOTHES, buzos: SIZES_CLOTHES, tennis: SIZES_SHOES, shorts: SIZES_SHORT, pantalonetas: SIZES_SHORT, gorras: SIZES_CAP,
@@ -17,14 +13,22 @@
   };
   let admin = false;
 
-  /* ---------- Comunicación con el servidor ---------- */
+  /* ---------- Comunicación con la API de Netlify ---------- */
   async function api(method, url, body) {
-    const opt = { method, credentials: "same-origin", headers: { "X-Admin": "1" } };
-    if (body !== undefined) { opt.headers["Content-Type"] = "application/json"; opt.body = JSON.stringify(body); }
+    const opt = { method, headers: {} };
+    if (body !== undefined) { 
+      opt.headers["Content-Type"] = "application/json"; 
+      opt.body = JSON.stringify(body); 
+    }
     let res;
-    try { res = await fetch(url, opt); } catch { throw new Error("No hay conexión con el servidor."); }
-    let data = {}; try { data = await res.json(); } catch {}
-    if (!res.ok) throw Object.assign(new Error(data.error || `Error del servidor (${res.status}).`), { status: res.status });
+    try { 
+      res = await fetch(url, opt); 
+    } catch { 
+      throw new Error("No hay conexión con la API."); 
+    }
+    let data = {}; 
+    try { data = await res.json(); } catch {}
+    if (!res.ok) throw Object.assign(new Error(data.error || `Error (${res.status}).`), { status: res.status });
     return data;
   }
 
@@ -58,12 +62,7 @@
     if (lastFocus && lastFocus.focus) lastFocus.focus();
   }
   root.addEventListener("mousedown", (e) => { if (e.target === root) closeModal(); });
-  $(".adm__x", root).addEventListener("click", closeModal);
-  document.addEventListener("keydown", (e) => {
-    if (root.hidden) return;
-    if (e.key === "Escape") { e.preventDefault(); e.stopImmediatePropagation(); closeModal(); }
-    if (e.key === "Tab") {
-      const f = $$("button:not([disabled]),input:not([disabled]):not([type=hidden]),select,[tabindex='0']", box).filter((el) => el.offsetParent !== null || el === document.activeElement);
+  $(".adm__x", root).addEventListener("click", closeModal);   document.addEventListener("keydown", (e) => {     if (root.hidden) return;     if (e.key === "Escape") { e.preventDefault(); e.stopImmediatePropagation(); closeModal(); }     if (e.key === "Tab") {       const f = $$("button:not([disabled]),input:not([disabled]):not([type=hidden]),select,[tabindex='0']", box).filter((el) => el.offsetParent !== null || el === document.activeElement);
       if (!f.length) return;
       const first = f[0], last = f[f.length - 1];
       if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
@@ -71,13 +70,12 @@
     }
   }, true);
 
-  // Formulario con botón que se bloquea mientras guarda y muestra el error si falla
   function bindForm(form, fn) {
     const err = $(".adm__err", form), btn = $("[type=submit]", form);
     const show = (m) => { err.textContent = m || ""; err.hidden = !m; };
     form.addEventListener("submit", async (e) => {
       e.preventDefault(); show("");
-      const label = btn.textContent; btn.disabled = true; btn.textContent = "Un momento…";
+      const label = btn.textContent; btn.disabled = true; btn.textContent = "Guardando…";
       try { await fn(Object.fromEntries(new FormData(form)), show); }
       catch (ex) { show(ex.message); }
       finally { btn.disabled = false; btn.textContent = label; }
@@ -85,109 +83,15 @@
     return show;
   }
 
-  /* ---------- Vistas: login, olvidé contraseña, restablecer, cambiar ---------- */
+  /* ---------- Vista de Login ---------- */
   function viewLogin(note) {
     openModal("Acceso administrador", `<form class="adm__form" novalidate>
       ${note ? `<p class="adm__ok">${h(note)}</p>` : ""}
       <label>Usuario<input name="user" autocomplete="username" required></label>
       <label>Contraseña<input name="password" type="password" autocomplete="current-password" required></label>
       <p class="adm__err" role="alert" hidden></p>
-      <button class="btn btn--red" type="submit">Entrar</button>
-      <button type="button" class="linkbtn" data-go="forgot">¿Olvidaste tu contraseña?</button></form>`);
-    bindForm($("form", body), async (d) => {
-      await api("POST", "api/auth/login", { user: d.user, password: d.password });
-      setAdmin(true); closeModal(); toast("Sesión iniciada. Usa ✎ Editar o ＋ Añadir producto.");
-    });
-    $("[data-go=forgot]", body).addEventListener("click", viewForgot);
-  }
-
-  function viewForgot() {
-    openModal("Restablecer contraseña", `<form class="adm__form">
-      <p>Te enviaremos un enlace para crear una contraseña nueva al correo registrado del administrador. El enlace vale 30 minutos.</p>
-      <p class="adm__err" role="alert" hidden></p>
-      <button class="btn btn--red" type="submit">Enviar enlace al correo</button>
-      <button type="button" class="linkbtn" data-go="login">← Volver</button></form>`);
-    bindForm($("form", body), async () => {
-      const r = await api("POST", "api/auth/forgot", {});
-      body.innerHTML = `<div class="adm__form"><p class="adm__ok">Listo. Si el correo está configurado en el servidor, el enlace llegó a <b>${h(r.email)}</b>. Revisa también spam.</p>
-        <button type="button" class="btn btn--ghost" data-go="login">← Volver al inicio de sesión</button></div>`;
-      $("[data-go=login]", body).addEventListener("click", () => viewLogin());
-    });
-    $("[data-go=login]", body).addEventListener("click", () => viewLogin());
-  }
-
-  function viewReset(token) {
-    openModal("Nueva contraseña", `<form class="adm__form">
-      <label>Nueva contraseña (mínimo 8 caracteres)<input name="password" type="password" autocomplete="new-password" minlength="8" required></label>
-      <label>Repite la contraseña<input name="again" type="password" autocomplete="new-password" required></label>
-      <p class="adm__err" role="alert" hidden></p>
-      <button class="btn btn--red" type="submit">Guardar contraseña</button></form>`);
-    bindForm($("form", body), async (d) => {
-      if (d.password !== d.again) throw new Error("Las contraseñas no coinciden.");
-      await api("POST", "api/auth/reset", { token, password: d.password });
-      history.replaceState(null, "", location.pathname + location.hash);
-      viewLogin("Contraseña actualizada. Ya puedes iniciar sesión.");
-    });
-  }
-
-  function viewPassword() {
-    openModal("Cambiar contraseña", `<form class="adm__form">
-      <label>Contraseña actual<input name="current" type="password" autocomplete="current-password" required></label>
-      <label>Nueva contraseña (mínimo 8 caracteres)<input name="password" type="password" autocomplete="new-password" minlength="8" required></label>
-      <label>Repite la nueva contraseña<input name="again" type="password" autocomplete="new-password" required></label>
-      <p class="adm__err" role="alert" hidden></p>
-      <button class="btn btn--red" type="submit">Cambiar contraseña</button></form>`);
-    bindForm($("form", body), async (d) => {
-      if (d.password !== d.again) throw new Error("Las contraseñas no coinciden.");
-      await api("POST", "api/auth/password", { current: d.current, password: d.password });
-      closeModal(); toast("Contraseña cambiada ✓");
-    });
-  }
-
-  /* ---------- Guardar el catálogo en el servidor ---------- */
-  async function save(list, okMsg) {
-    try {
-      const r = await api("PUT", "api/products", { products: list });
-      PRODUCTS.length = 0; PRODUCTS.push(...r.products);
-      refreshCatalog(); toast(okMsg || "Cambios guardados ✓");
-      return true;
-    } catch (e) {
-      if (e.status === 401) { setAdmin(false); toast("Tu sesión venció. Inicia sesión de nuevo.", true); viewLogin(); }
-      else toast(e.message, true);
-      return false;
-    }
-  }
-
-  function move(id, dir) {
-    const i = PRODUCTS.findIndex((p) => p.id === id); if (i < 0) return;
-    let j = i + dir;
-    while (j >= 0 && j < PRODUCTS.length && PRODUCTS[j].category !== PRODUCTS[i].category) j += dir;
-    if (j < 0 || j >= PRODUCTS.length) return toast("Ya está en el extremo de la sección.");
-    const list = PRODUCTS.slice(); [list[i], list[j]] = [list[j], list[i]];
-    save(list, "Orden actualizado ✓");
-  }
-
-  /* ---------- Foto: se reduce en el navegador antes de subirla ---------- */
-  function shrink(file) {
-    return new Promise((resolve, reject) => {
-      if (!/^image\//.test(file.type)) return reject(new Error("Elige un archivo de imagen."));
-      const url = URL.createObjectURL(file), img = new Image();
-      img.onload = () => {
-        const k = Math.min(1, 1200 / Math.max(img.naturalWidth, img.naturalHeight));
-        const c = document.createElement("canvas");
-        c.width = Math.round(img.naturalWidth * k); c.height = Math.round(img.naturalHeight * k);
-        const x = c.getContext("2d"); x.fillStyle = "#fff"; x.fillRect(0, 0, c.width, c.height); x.drawImage(img, 0, 0, c.width, c.height);
-        URL.revokeObjectURL(url); resolve(c.toDataURL("image/jpeg", 0.86));
-      };
-      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("No se pudo leer esa foto. Prueba con JPG o PNG.")); };
-      img.src = url;
-    });
-  }
-
-  /* ---------- Editor de producto (crear / editar) ---------- */
-  function editor(product, category) {
-    const isNew = !product;
-    const cats = $$(".shop").map((s) => [s.dataset.category, $("h2", s).textContent]);
+      <button class="btn btn--red" type="submit">Entrar</button></form>`);
+    bindForm($("form", body), async (d) => {       await api("POST", "/api/login", { user: d.user, password: d.password });       setAdmin(true); closeModal(); toast("Sesión iniciada. Usa ✎ Editar o ＋ Añadir producto.");     });   }    /* ---------- Guardar en Netlify Blobs ---------- */   async function save(list, okMsg) {     try {       const r = await api("POST", "/api/products", list);       if (r && Array.isArray(r.products)) {         PRODUCTS.length = 0;          PRODUCTS.push(...r.products);       }       if (typeof refreshCatalog === "function") refreshCatalog();       else location.reload();       toast(okMsg \vert{}\vert{} "Cambios guardados ✓");       return true;     } catch (e) {       toast(e.message, true);       return false;     }   }    function move(id, dir) {     const i = PRODUCTS.findIndex((p) => p.id === id); if (i < 0) return;     let j = i + dir;     while (j >= 0 && j < PRODUCTS.length && PRODUCTS[j].category !== PRODUCTS[i].category) j += dir;     if (j < 0 \vert{}\vert{} j >= PRODUCTS.length) return toast("Ya está en el extremo de la sección.");     const list = PRODUCTS.slice(); [list[i], list[j]] = [list[j], list[i]];     save(list, "Orden actualizado ✓");   }    /* ---------- Procesar foto a Base64 ---------- */   function shrink(file) {     return new Promise((resolve, reject) => {       if (!/^image\//.test(file.type)) return reject(new Error("Elige un archivo de imagen."));       const url = URL.createObjectURL(file), img = new Image();       img.onload = () => {         const k = Math.min(1, 1000 / Math.max(img.naturalWidth, img.naturalHeight));         const c = document.createElement("canvas");         c.width = Math.round(img.naturalWidth * k); c.height = Math.round(img.naturalHeight * k);         const x = c.getContext("2d"); x.fillStyle = "#fff"; x.fillRect(0, 0, c.width, c.height); x.drawImage(img, 0, 0, c.width, c.height);         URL.revokeObjectURL(url); resolve(c.toDataURL("image/jpeg", 0.82));       };       img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("No se pudo leer la foto. Prueba con JPG o PNG.")); };       img.src = url;     });   }    /* ---------- Editor de producto ---------- */   function editor(product, category) {     const isNew = !product;     const cats = $$(".shop").map((s) => [s.dataset.category, $("h2", s).textContent]);
     if (!cats.length) return;
     const cat0 = product ? product.category : (cats.some((c) => c[0] === category) ? category : cats[0][0]);
     const p = product || { id: "", category: cat0, name: "", price: "", image: "", sizes: (SIZE_SETS[cat0] || []).slice(), available: (SIZE_SETS[cat0] || []).slice(), tag: "" };
@@ -198,7 +102,7 @@
       <div class="adm__photo">
         <img alt="" src="${h(p.image || "")}">
         <div><label class="btn btn--ghost adm__file">${isNew ? "Elegir foto" : "Cambiar foto"}<input type="file" name="photo" accept="image/*" hidden></label>
-        <small>JPG o PNG. Se ajusta sola para que la página cargue rápido.</small></div>
+        <small>JPG o PNG.</small></div>
       </div>
       <label>Nombre del producto<input name="name" maxlength="80" value="${h(p.name)}" required></label>
       <div class="adm__row">
@@ -214,9 +118,7 @@
 
     const form = $("form", body), prev = $(".adm__photo img", form), fileIn = $("[name=photo]", form);
     const sizesIn = $("[name=sizes]", form), priceIn = $("[name=price]", form), catSel = $("[name=category]", form), availBox = $(".adm__avail div", form);
-    prev.onerror = () => { prev.onerror = null; prev.src = placeholderImage(p.name || "Producto"); };
-    if (!p.image) prev.src = placeholderImage("Sin foto");
-
+    
     const parseSizes = () => [...new Set(sizesIn.value.split(/[,;\n]+/).map((s) => s.trim()).filter(Boolean))].slice(0, 14);
     function renderAvail() {
       const sizes = parseSizes();
@@ -234,34 +136,41 @@
     catSel.addEventListener("change", () => { if (!sizesTouched) useDefaults(); });
     $("[data-cancel]", form).addEventListener("click", closeModal);
 
-    const show = bindForm(form, async (d, showErr) => {
+    bindForm(form, async (d) => {
       const name = d.name.trim(); if (!name) throw new Error("Escribe el nombre del producto.");
       const price = parseInt(String(d.price).replace(/\D/g, ""), 10); if (!Number.isFinite(price)) throw new Error("Escribe el precio (solo números).");
       const sizes = parseSizes(); if (!sizes.length) throw new Error("Agrega al menos una talla.");
       if (isNew && !pending) throw new Error("Elige una foto del producto.");
-      let image = p.image;
-      if (pending) image = (await api("POST", "api/upload", { dataUrl: pending })).path;
-      const item = { id: p.id || `${d.category}-${Date.now().toString(36)}`, category: d.category, name, price, image, sizes, available: sizes.filter((s) => avail.has(s)) };
+      
+      let image = pending || p.image;
+      const item = { 
+        id: p.id || `prod_${Date.now()}`, 
+        category: d.category, 
+        name, 
+        price, 
+        image, 
+        sizes, 
+        available: sizes.filter((s) => avail.has(s)) 
+      };
       if (d.tag.trim()) item.tag = d.tag.trim();
+      
       const list = isNew ? [...PRODUCTS, item] : PRODUCTS.map((x) => (x.id === p.id ? item : x));
       if (await save(list, isNew ? "Producto añadido ✓" : "Producto actualizado ✓")) closeModal();
     });
+
     fileIn.addEventListener("change", async () => {
       const f = fileIn.files[0]; if (!f) return;
-      try { pending = await shrink(f); prev.onerror = null; prev.src = pending; show(""); } catch (e) { show(e.message); }
+      try { pending = await shrink(f); prev.src = pending; } catch (e) { toast(e.message, true); }
     });
   }
 
-  /* ---------- Marcas dentro de la página (solo con sesión) ---------- */
+  /* ---------- Botones en las tarjetas ---------- */
   function decorate() {
-    $$(".adm-add,.adm-bar").forEach((el) => el.remove());
-    if (!admin) return;
-    $$(".shop").forEach((sec) => {
+    $$(".adm-add,.adm-bar").forEach((el) => el.remove());     if (!admin) return;     $$
+(".shop").forEach((sec) => {
       const b = document.createElement("button");
       b.type = "button"; b.className = "btn btn--red adm-add"; b.dataset.admAdd = sec.dataset.category; b.textContent = "＋ Añadir producto";
-      $(".shop__head", sec).appendChild(b);
-    });
-    $$(".card").forEach((card) => {
+      $(".shop__head", sec).appendChild(b);     });     $$(".card").forEach((card) => {
       const bar = document.createElement("div");
       bar.className = "adm-bar";
       bar.innerHTML = `<button type="button" data-adm-act="edit">✎ Editar</button>
@@ -277,16 +186,16 @@
     if (add) return editor(null, add.dataset.admAdd);
     const act = e.target.closest("[data-adm-act]");
     if (!act || !admin) return;
-    const id = act.closest(".card").dataset.id, prod = PRODUCTS.find((x) => x.id === id);
+    const id = act.closest(".card").dataset.id, prod = PRODUCTS.find((x) => String(x.id) === String(id));
     if (!prod) return;
     const a = act.dataset.admAct;
     if (a === "edit") editor(prod);
     else if (a === "left") move(id, -1);
     else if (a === "right") move(id, 1);
-    else if (a === "del" && confirm(`¿Eliminar «${prod.name}»?\nEsta acción no se puede deshacer.`)) save(PRODUCTS.filter((x) => x.id !== id), "Producto eliminado ✓");
+    else if (a === "del" && confirm(`¿Eliminar «${prod.name}»?\nEsta acción no se puede deshacer.`)) save(PRODUCTS.filter((x) => String(x.id) !== String(id)), "Producto eliminado ✓");
   });
 
-  /* ---------- Barra flotante del administrador ---------- */
+  /* ---------- Barra flotante ---------- */
   function setAdmin(on) {
     admin = on;
     document.body.classList.toggle("is-admin", on);
@@ -295,11 +204,9 @@
     if (on && !dock) {
       dock = document.createElement("div");
       dock.className = "adm-dock"; dock.setAttribute("role", "region"); dock.setAttribute("aria-label", "Panel de administrador");
-      dock.innerHTML = `<b>● Modo administrador</b><button type="button" data-dock="pass">Contraseña</button><button type="button" data-dock="out">Cerrar sesión</button>`;
-      dock.addEventListener("click", async (e) => {
+      dock.innerHTML = `<b>● Modo administrador</b><button type="button" data-dock="out">Cerrar sesión</button>`;
+      dock.addEventListener("click", (e) => {
         const k = e.target.closest("[data-dock]"); if (!k) return;
-        if (k.dataset.dock === "pass") return viewPassword();
-        try { await api("POST", "api/auth/logout", {}); } catch {}
         setAdmin(false); toast("Sesión cerrada.");
       });
       document.body.appendChild(dock);
@@ -307,7 +214,7 @@
     decorate();
   }
 
-  /* ---------- Arranque ---------- */
+  /* ---------- Inicio ---------- */
   const copy = $(".footer__copy");
   if (copy) {
     const b = document.createElement("button");
@@ -316,9 +223,8 @@
     copy.append(" · ", b);
   }
 
-  const qs = new URLSearchParams(location.search), resetToken = qs.get("reset");
   let hinted = false; try { hinted = localStorage.getItem("gs_adm") === "1"; } catch {}
-  if (hinted) api("GET", "api/auth/me").then((r) => { if (r.admin) setAdmin(true); else setAdmin(false); }).catch(() => {});
-  if (resetToken) viewReset(resetToken);
-  else if (qs.has("admin")) viewLogin();
+  if (hinted) setAdmin(true);
+  const qs = new URLSearchParams(location.search);
+  if (qs.has("admin")) viewLogin();
 })();
