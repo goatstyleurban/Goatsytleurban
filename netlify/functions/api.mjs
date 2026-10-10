@@ -1,59 +1,46 @@
 import { getStore } from "@netlify/blobs";
 
-// Helper para cargar/inicializar el admin
-async function loadAdmin(store) {
-  try {
-    let a = await store.get("admin", { type: "json" });
-    if (a) return a;
-
-    const pw = process.env.ADMIN_PASSWORD || "";
-    const usr = process.env.ADMIN_USER || "admin";
-
-    if (pw.length < 8) return null;
-
-    a = { user: usr };
-    // Aquí ejecutas tu función para procesar la clave
-    if (typeof setPassword === "function") {
-      setPassword(a, pw);
-    }
-    await store.setJSON("admin", a);
-    return a;
-  } catch (err) {
-    console.error("Error en loadAdmin:", err);
-    return null;
-  }
-}
-
-// EXPORTACIÓN OBLIGATORIA PARA NETLIFY FUNCTIONS
 export const handler = async (event, context) => {
   try {
+    // Inicializar la tienda de Blobs indicando el nombre explícito
     const store = getStore("goat_style_store");
 
-    // Lógica para procesar la petición
+    // Si estás en login / POST:
     if (event.httpMethod === "POST" && event.path.includes("/login")) {
-      const admin = await loadAdmin(store);
-      
-      if (!admin) {
+      const body = JSON.parse(event.body || "{}");
+      const { user, password } = body;
+
+      const adminUser = process.env.ADMIN_USER || "admin";
+      const adminPassword = process.env.ADMIN_PASSWORD;
+
+      // Verificar las credenciales contra las variables de entorno de Netlify
+      if (user === adminUser && password === adminPassword) {
+        return {
+          statusCode: 200,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ success: true, message: "Sesión iniciada correctamente" })
+        };
+      } else {
         return {
           statusCode: 401,
-          body: JSON.stringify({ error: "Credenciales inválidas o no configuradas" })
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ error: "Usuario o contraseña incorrectos" })
         };
       }
-
-      return {
-        statusCode: 200,
-        body: JSON.stringify({ success: true, user: admin.user })
-      };
     }
 
+    // Respuesta por defecto
     return {
       statusCode: 200,
-      body: JSON.stringify({ message: "API funcionando correctamente" })
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: "API activa" })
     };
+
   } catch (error) {
-    console.error("Error en handler:", error);
+    console.error("Error en la función API:", error);
     return {
       statusCode: 500,
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ error: error.message || "Error interno del servidor" })
     };
   }
