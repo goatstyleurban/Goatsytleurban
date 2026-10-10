@@ -1,0 +1,89 @@
+/* ==========================================================
+   GOAT STYLE | Panel de administrador
+   ========================================================== */
+body.adm-open { overflow: hidden; }
+
+/* Enlace discreto en el footer */
+.adm-entry { display: inline; padding: 0; font-size: inherit; text-decoration: none; opacity: .75; }
+.adm-entry:hover { opacity: 1; }
+
+/* Barra flotante (solo con sesión) */
+.adm-dock {
+  position: fixed; left: 1rem; bottom: 1rem; z-index: 155;
+  display: flex; align-items: center; flex-wrap: wrap; gap: .5rem .7rem; max-width: calc(100vw - 6.5rem);
+  padding: .6rem .8rem; background: var(--coal); border: 2px solid var(--red); border-radius: 6px; box-shadow: 4px 4px 0 var(--red);
+  font-size: .9rem;
+}
+.adm-dock b { color: var(--red-hot); font-weight: 700; letter-spacing: .02em; }
+.adm-dock button { min-height: 36px; padding: 0 .7rem; background: transparent; border: 1px solid var(--bone); border-radius: 4px; color: var(--bone); }
+.adm-dock button:hover { background: var(--bone); color: var(--black); }
+
+/* Mientras se ve el aviso de cookies, la barra se sube para no taparlo */
+body:has(#ck:not([hidden])) .adm-dock { bottom: auto; top: calc(var(--header-h) + .8rem); }
+
+/* Marcas sobre el catálogo */
+body.is-admin .shop__head { flex-wrap: wrap; gap: .8rem 1.2rem; }
+.adm-add { margin-left: auto; padding: .7rem 1.1rem; font-size: .95rem; }
+body.is-admin .card { outline: 1px dashed rgba(225, 6, 0, .55); outline-offset: 3px; }
+.adm-bar { display: flex; flex-wrap: wrap; gap: .4rem; padding: .7rem 1.1rem 1.1rem; border-top: 1px dashed var(--red); }
+.adm-bar button {
+  flex: 1 1 auto; min-height: 44px; padding: 0 .7rem; background: var(--black); color: var(--bone);
+  border: 1px solid var(--line); border-radius: 4px; font-size: .9rem; font-weight: 600;
+}
+.adm-bar button:hover { background: var(--bone); color: var(--black); }
+.adm-bar .is-del { color: #ff6b66; border-color: #5a1a17; }
+.adm-bar .is-del:hover { background: var(--red); color: #fff; border-color: var(--red); }
+
+/* Ventana */
+.adm { position: fixed; inset: 0; z-index: 180; display: grid; place-items: start center; overflow-y: auto; padding: 1.2rem; background: rgba(0, 0, 0, .86); }
+.adm[hidden] { display: none; }
+.adm__box { position: relative; width: min(540px, 100%); margin: auto; padding: 1.6rem 1.4rem 1.5rem; background: var(--coal); border-top: 4px solid var(--red); border-radius: 6px; outline: none; }
+.adm__box h2 { margin: 0 2.5rem 1rem 0; font-family: var(--font-display); font-weight: 400; font-size: 2rem; text-transform: uppercase; line-height: 1.1; }
+.adm__x { position: absolute; top: .8rem; right: .8rem; width: 44px; height: 44px; background: transparent; border: 1px solid var(--line); border-radius: 50%; color: var(--bone); font-size: 1.1rem; }
+.adm__x:hover { background: var(--red); border-color: var(--red); }
+
+.adm__form { display: grid; gap: 1rem; }
+.adm__form p { margin: 0; }
+.adm__form label { display: grid; gap: .35rem; font-weight: 600; font-size: .95rem; }
+.adm__form input:not([type=checkbox]):not([type=file]), .adm__form select {
+  width: 100%; height: 46px; padding: 0 .9rem; background: var(--black); color: var(--bone);
+  border: 2px solid var(--line); border-radius: 4px; font: inherit; font-weight: 400;
+}
+.adm__form input:focus, .adm__form select:focus { outline: none; border-color: var(--red); }
+.adm__form small { color: var(--ash); font-weight: 400; }
+.adm__row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+.adm__err { padding: .7rem .9rem; background: #3a0d0b; border-left: 4px solid var(--red-hot); color: #ffd7d4; font-size: .95rem; }
+.adm__ok { padding: .7rem .9rem; background: #0e2a14; border-left: 4px solid #3ecf62; color: #d6f7de; font-size: .95rem; }
+.adm__actions { display: flex; gap: .8rem; flex-wrap: wrap; }
+.adm__actions .btn { flex: 1 1 140px; }
+.adm__form .btn:disabled { opacity: .6; cursor: wait; }
+
+.adm__photo { display: flex; gap: 1rem; align-items: center; }
+.adm__photo img { width: 96px; height: 120px; flex: none; object-fit: cover; background: var(--black); border: 2px solid var(--line); border-radius: 4px; }
+.adm__photo > div { display: grid; gap: .5rem; }
+.adm__file { cursor: pointer; text-align: center; }
+
+.adm__avail { margin: 0; padding: .8rem; border: 1px solid var(--line); border-radius: 4px; }
+.adm__avail legend { padding: 0 .4rem; font-weight: 600; font-size: .95rem; }
+.adm__avail div { display: flex; flex-wrap: wrap; gap: .5rem; }
+.adm__form label.adm__chk { display: block; }
+.adm__chk input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.adm__chk span { display: grid; place-items: center; min-width: 48px; min-height: 44px; padding: 0 .8rem; border: 2px solid var(--line); border-radius: 4px; background: var(--black); cursor: pointer; font-weight: 600; }
+.adm__chk input:checked + span { background: var(--bone); color: var(--black); border-color: var(--bone); }
+.adm__chk input:focus-visible + span { outline: 2px solid var(--red-hot); outline-offset: 2px; }
+
+.adm-toast {
+  position: fixed; left: 50%; top: 1rem; z-index: 190; width: max-content; max-width: calc(100vw - 2rem); padding: .8rem 1.2rem;
+  background: var(--bone); color: var(--black); border-radius: 4px; font-weight: 700; text-align: center;
+  opacity: 0; transform: translate(-50%, -20px); pointer-events: none; transition: opacity .25s, transform .25s var(--ease);
+}
+.adm-toast.on { opacity: 1; transform: translate(-50%, 0); }
+.adm-toast.bad { background: var(--red); color: #fff; }
+
+@media (max-width: 480px) {
+  .adm { padding: .6rem; }
+  .adm__box { padding: 1.3rem 1rem; }
+  .adm__row { grid-template-columns: 1fr; }
+  .adm-dock { right: 5.2rem; max-width: none; }
+}
+@media (prefers-reduced-motion: reduce) { .adm-toast { transition: none; } }

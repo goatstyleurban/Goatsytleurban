@@ -1,6 +1,7 @@
 /* ==========================================================
    GOAT STYLE | Urban Store
-   Aquí editas el WhatsApp y los productos. Todo lo demás se
+   Aquí editas el WhatsApp. Los productos se editan desde el panel de
+   administrador (aquí quedan como respaldo). Todo lo demás se
    arma solo.
    ========================================================== */
 
@@ -142,6 +143,8 @@ function placeholderImage(label) {
 const WA_ICON = `<svg viewBox="0 0 32 32" aria-hidden="true"><path fill="currentColor" d="M16 3C8.8 3 3 8.700 3 15.800c0 2.500.7 4.800 2 6.800L3 29l6.600-1.900c1.900 1 4 1.600 6.300 1.600 7.200 0 13-5.700 13-12.800S23.200 3 16 3zm0 23.300c-2 0-3.900-.6-5.500-1.600l-.4-.2-3.900 1.100 1.100-3.800-.3-.4c-1.200-1.700-1.800-3.600-1.800-5.600C5.200 10 10 5.400 16 5.400s10.800 4.600 10.800 10.400S22 26.300 16 26.300zm6-7.800c-.3-.2-1.900-.9-2.200-1s-.5-.2-.7.200-.8 1-1 1.200-.4.200-.7.100c-1.900-.9-3.100-1.700-4.300-3.800-.3-.6.300-.5.900-1.700.1-.2 0-.4 0-.5l-1-2.300c-.3-.6-.5-.5-.7-.5h-.6c-.2 0-.5.100-.8.400-.3.300-1.100 1.100-1.100 2.600s1.100 3 1.300 3.200c.2.200 2.200 3.400 5.400 4.700 2 .8 2.800.9 3.800.7.600-.1 1.900-.8 2.200-1.500.3-.7.300-1.400.2-1.500-.1-.2-.3-.3-.7-.4z"/></svg>`;
 
 /* ---------- 4. CONSTRUCCIÓN DE TARJETAS ---------- */
+const esc = (v) => String(v).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
 function createCard(product, index) {
   const soldOut = product.available.length === 0;
   const card = document.createElement("article");
@@ -152,23 +155,23 @@ function createCard(product, index) {
   const sizeButtons = product.sizes
     .map((s) => {
       const ok = product.available.includes(s);
-      return `<button type="button" class="size" role="radio" aria-checked="false" data-size="${s}"
-        ${ok ? "" : 'disabled aria-label="Talla ' + s + ' agotada"'}>${s}</button>`;
+      return `<button type="button" class="size" role="radio" aria-checked="false" data-size="${esc(s)}"
+        ${ok ? "" : 'disabled aria-label="Talla ' + esc(s) + ' agotada"'}>${esc(s)}</button>`;
     })
     .join("");
 
   card.innerHTML = `
     <div class="card__media">
-      <img src="${product.image}" alt="${product.name}" loading="lazy" width="400" height="500">
-      <button type="button" class="zoom" aria-label="Ampliar foto: ${product.name}"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5 21 21M10.5 7.5v6M7.5 10.5h6"/></svg></button>
-      <button type="button" class="fav" data-fav="${product.id}" aria-pressed="false" aria-label="Favorito: ${product.name}">♡</button>
-      ${product.tag ? `<span class="tag">${product.tag}</span>` : ""}
+      <img src="${esc(product.image)}" alt="${esc(product.name)}" loading="lazy" width="400" height="500">
+      <button type="button" class="zoom" aria-label="Ampliar foto: ${esc(product.name)}"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5 21 21M10.5 7.5v6M7.5 10.5h6"/></svg></button>
+      <button type="button" class="fav" data-fav="${product.id}" aria-pressed="false" aria-label="Favorito: ${esc(product.name)}">♡</button>
+      ${product.tag ? `<span class="tag">${esc(product.tag)}</span>` : ""}
     </div>
     <div class="card__body">
-      <h3 class="card__name">${product.name}</h3>
+      <h3 class="card__name">${esc(product.name)}</h3>
       <p class="card__price">${formatPrice(product.price)}</p>
       <p class="sizes-label">${product.sizes.length > 1 ? "Elige tu talla" : "Talla"}</p>
-      <div class="sizes" role="radiogroup" aria-label="Tallas de ${product.name}">${sizeButtons}</div>
+      <div class="sizes" role="radiogroup" aria-label="Tallas de ${esc(product.name)}">${sizeButtons}</div>
       <button type="button" class="btn btn--ghost add" data-add="${product.id}">Añadir al carrito</button>
       <a class="btn btn--wa" href="${waLink(productMessage(product))}" target="_blank" rel="noopener">
         ${WA_ICON}<span>${soldOut ? "Preguntar cuándo llega" : "Pedir por WhatsApp"}</span>
@@ -207,9 +210,38 @@ function createCard(product, index) {
 function renderCatalog() {
   document.querySelectorAll(".shop").forEach((section) => {
     const grid = section.querySelector(".grid");
+    grid.replaceChildren();
     const items = PRODUCTS.filter((p) => p.category === section.dataset.category);
     items.forEach((p, i) => grid.appendChild(createCard(p, i)));
   });
+  document.dispatchEvent(new CustomEvent("catalog:rendered"));
+}
+
+// Vuelve a dibujar el catálogo (lo usa el panel de administrador al guardar cambios)
+function refreshCatalog() {
+  renderCatalog();
+  setupReveal();
+}
+
+// Si el servidor tiene productos guardados desde el panel de administrador, se usan esos.
+// Si no hay servidor (o no hay nada guardado), se queda el catálogo de este archivo.
+async function loadCatalog() {
+  if (!/^https?:$/.test(location.protocol)) return;
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), 3000);
+  try {
+    const r = await fetch("api/products", { cache: "no-store", signal: ctl.signal });
+    if (!r.ok) return;
+    const { products } = await r.json();
+    if (Array.isArray(products)) { PRODUCTS.length = 0; PRODUCTS.push(...products); }
+  } catch {} finally { clearTimeout(timer); }
+}
+
+function jumpToHash() {
+  const h = location.hash;
+  if (h.length < 2 || h.startsWith("#/")) return;
+  const el = document.getElementById(decodeURIComponent(h.slice(1)));
+  if (el) el.scrollIntoView();
 }
 
 /* ---------- 5. ANIMACIONES Y COMPORTAMIENTO ---------- */
@@ -272,11 +304,10 @@ function setupGeneralWhatsApp() {
 document.documentElement.classList.add("js");
 document.getElementById("year").textContent = new Date().getFullYear();
 
-renderCatalog();
 setupGeneralWhatsApp();
 setupHeader();
 setupMenu();
-setupReveal();
+loadCatalog().then(() => { renderCatalog(); setupReveal(); jumpToHash(); });
 
 /* ==========================================================
    TIENDA: carrito, favoritos, buscador, páginas, cookies y
@@ -308,6 +339,14 @@ setupReveal();
 
   let cart = st.get("cart", []), favs = st.get("favs", []), promo = st.get("promo", null);
   let kind = null, promoMsg = "";
+
+  // Si el administrador eliminó productos, se sacan también del carrito y favoritos
+  document.addEventListener("catalog:rendered", () => {
+    const n = cart.length + favs.length;
+    cart = cart.filter((l) => byId(l.id));
+    favs = favs.filter((id) => byId(id));
+    if (cart.length + favs.length !== n) save();
+  });
 
   /* ---------- Estructura (se inserta una sola vez) ---------- */
   document.body.insertAdjacentHTML("beforeend", `
